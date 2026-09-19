@@ -1,0 +1,29 @@
+{
+  "name": "@storm-leads/db",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "migrate": "tsx src/scripts/migrate.ts",
+    "seed": "tsx src/scripts/seed.ts",
+    "reset:generated": "tsx src/scripts/reset-generated.ts",
+    "ingest:parcels": "tsx src/scripts/ingest-parcels.ts",
+    "ingest:storms": "tsx src/scripts/ingest-storms.ts"
+  },
+  "dependencies": {
+    "@storm-leads/core": "workspace:*",
+    "dotenv": "^16.5.0",
+    "drizzle-orm": "^0.44.4",
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@types/geojson": "^7946.0.16",
+    "@types/node": "^22.15.0",
+    "drizzle-kit": "^0.31.4",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

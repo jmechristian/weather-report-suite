@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #161412;
+  --panel: #211e1b;
+  --ink: #f3ece3;
+  --muted: #b7aaa0;
+  --line: #3a342e;
+  --accent: #d4783b;
+  --wind: #7ea8b8;
+}
+
+html,
+body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-sans), "IBM Plex Sans", system-ui, sans-serif;
+}
+
+h1,
+h2,
+.serif {
+  font-family: var(--font-serif), "Fraunces", Georgia, serif;
+}
+
+.maplibregl-popup-content {
+  background: #211e1b;
+  color: #f3ece3;
+  border-radius: 2px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+  border-top-color: #211e1b;
+}

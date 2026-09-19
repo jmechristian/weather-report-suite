@@ -1,0 +1,15 @@
+{
+  "name": "storm-leads",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "dev": "corepack pnpm --filter web dev",
+    "build": "corepack pnpm --filter web build",
+    "db:migrate": "corepack pnpm --filter @storm-leads/db migrate",
+    "db:seed": "corepack pnpm --filter @storm-leads/db seed",
+    "db:reset": "corepack pnpm --filter @storm-leads/db reset:generated",
+    "ingest:parcels": "corepack pnpm --filter @storm-leads/db ingest:parcels",
+    "ingest:storms": "corepack pnpm --filter @storm-leads/db ingest:storms",
+    "test": "corepack pnpm --filter @storm-leads/core test"
+  }
+}
