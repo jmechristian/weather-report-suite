@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { ingestStorms } from "@storm-leads/db";
+import { ingestStorms, latestStormSyncedAt } from "@storm-leads/db";
 import { withAuth, jsonError, getDb } from "@/lib/server";
 
 export const maxDuration = 300;
@@ -8,6 +8,7 @@ export const maxDuration = 300;
 export async function GET() {
   return withAuth(async () => {
     const { client } = getDb();
+    const syncedAt = await latestStormSyncedAt(client);
     const rows = await client`
       SELECT
         s.id,
@@ -29,7 +30,11 @@ export async function GET() {
       WHERE s.occurred_at > now() - interval '12 months'
       ORDER BY s.occurred_at DESC
     `;
-    return Response.json({ storms: rows, now: new Date().toISOString() });
+    return Response.json({
+      storms: rows,
+      now: new Date().toISOString(),
+      lastSyncedAt: syncedAt ? syncedAt.toISOString() : null,
+    });
   });
 }
 

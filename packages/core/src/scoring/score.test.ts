@@ -31,10 +31,17 @@ describe("scoreLead", () => {
     expect(strong.breakdown.factors.severity).toBeGreaterThan(0.7);
   });
 
-  it("treats missing roof age as a mid factor", () => {
+  it("treats missing home age as a mid factor and 20+ years as full intent", () => {
     expect(roofAgeFactor(null, null)).toBe(0.5);
     expect(roofAgeFactor(1990, null, 2026)).toBe(1);
+    expect(roofAgeFactor(2006, null, 2026)).toBe(1);
+    expect(roofAgeFactor(2007, null, 2026)).toBe(0.75);
     expect(roofAgeFactor(2024, null, 2026)).toBe(0.15);
+  });
+
+  it("treats a recent reroof as low intent even on an old house", () => {
+    expect(roofAgeFactor(1970, null, 2026, 2022)).toBe(0.15);
+    expect(roofAgeFactor(1970, 2020, 2026, null)).toBe(1);
   });
 
   it("normalizes wind and hail at the warning thresholds", () => {

@@ -23,6 +23,7 @@ export async function GET(
         c.name AS county_name,
         p.owner_name,
         p.year_built,
+        p.last_reroof_year,
         p.property_type,
         p.county_fips,
         ST_AsGeoJSON(p.centroid)::json AS centroid,

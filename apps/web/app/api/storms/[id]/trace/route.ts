@@ -4,12 +4,13 @@ import {
   TRACE_HARD_CAP,
   TracerfyProvider,
   creditsToUsd,
+  dmvCounty,
   fiveDigitZip,
   getServerEnv,
   maxTraceLookups,
   postalCityForTrace,
 } from "@storm-leads/core";
-import { getUsageSnapshot } from "@storm-leads/db";
+import { getScoreProgress, getUsageSnapshot } from "@storm-leads/db";
 import { withAuth, jsonError, getDb } from "@/lib/server";
 
 const Body = z.object({
@@ -20,6 +21,7 @@ type TraceTarget = {
   parcel_id: string;
   county_fips: string;
   county_name: string;
+  county_state: string;
   county_parcel_id: string;
   prclid: string | null;
   parcel_nsp: string | null;
@@ -48,6 +50,18 @@ export async function POST(
     if (!env.TRACERFY_API_KEY) return jsonError("TRACERFY_API_KEY is not set", 500);
 
     const { client } = getDb();
+    const scoring = await getScoreProgress(client, id);
+    if (scoring.status === "running") {
+      return jsonError("Generate is still running for this storm. Wait for it to finish, then Trace.", 409);
+    }
+
+    const [leadCount] = await client<{ n: number }[]>`
+      SELECT count(*)::int AS n FROM leads WHERE storm_event_id = ${id}::uuid
+    `;
+    if ((leadCount?.n ?? 0) === 0) {
+      return jsonError("No leads on this storm. Generate leads first.", 409);
+    }
+
     const [hitCount] = await client<{ n: number }[]>`
       SELECT count(*)::int AS n
       FROM leads l
@@ -67,6 +81,7 @@ export async function POST(
         p.id AS parcel_id,
         p.county_fips,
         c.name AS county_name,
+        c.state AS county_state,
         p.county_parcel_id,
         p.raw->>'PRCLID' AS prclid,
         p.raw->>'PARCEL_ID_NSP' AS parcel_nsp,
@@ -82,7 +97,10 @@ export async function POST(
       JOIN parcels p ON p.id = l.parcel_id
       JOIN counties c ON c.fips = p.county_fips
       WHERE l.storm_event_id = ${id}::uuid
-        AND p.situs_address IS NOT NULL
+        AND (
+          NULLIF(btrim(p.county_parcel_id), '') IS NOT NULL
+          OR NULLIF(btrim(p.situs_address), '') IS NOT NULL
+        )
         AND p.owner_name IS NULL
         AND NOT EXISTS (SELECT 1 FROM contacts c WHERE c.parcel_id = p.id)
         AND (p.last_traced_at IS NULL OR p.last_traced_at <= now() - interval '90 days')
@@ -91,17 +109,10 @@ export async function POST(
     `;
 
     if (targets.length === 0) {
-      const usage = await getUsageSnapshot(client, id);
-      return Response.json({
-        requested: 0,
-        hits: 0,
-        misses: 0,
-        alreadyHits,
-        target: targetHits,
-        credits: 0,
-        estimatedUsd: 0,
-        usage,
-      });
+      return jsonError(
+        "No untraced parcels on this storm. They may already have been attempted in the last 90 days.",
+        409,
+      );
     }
 
     const tracer = new TracerfyProvider(env.TRACERFY_API_KEY);
@@ -119,26 +130,21 @@ export async function POST(
     for (const target of targets) {
       if (hits >= need) break;
       attempted.push(target.parcel_id);
-      if (!target.situs_address) {
-        misses += 1;
-        await client`
-          UPDATE parcels SET last_traced_at = now()
-          WHERE id = ${target.parcel_id}::uuid
-        `;
-        continue;
-      }
       try {
         const zip = fiveDigitZip(target.situs_zip);
+        const catalog = dmvCounty(target.county_fips);
         const city =
           postalCityForTrace(zip, target.situs_city) ||
           target.situs_city ||
+          catalog?.fieldMap.cityFallback ||
           target.county_name;
         const result = await tracer.trace({
-          address: target.situs_address,
+          address: target.situs_address ?? "",
           city,
-          state: target.situs_state || "VA",
+          state: target.county_state || target.situs_state || catalog?.state || "",
           zip,
           countyFips: target.county_fips,
+          countyName: target.county_name,
           parcelId: target.prclid ?? target.county_parcel_id,
           parcelIdAlt: target.parcel_nsp ?? undefined,
           pageNum: target.page_num ?? undefined,
@@ -157,22 +163,29 @@ export async function POST(
           continue;
         }
         hits += 1;
-        if (result.ownerName) {
-          await client`
-            UPDATE parcels SET owner_name = ${result.ownerName}
-            WHERE id = ${target.parcel_id}::uuid AND owner_name IS NULL
-          `;
-        }
+        await client`
+          UPDATE parcels SET
+            owner_name = COALESCE(${result.ownerName ?? null}, owner_name),
+            mailing_address = COALESCE(${result.mailingAddressText ?? null}, mailing_address),
+            owner_age = COALESCE(${result.ownerAge ?? null}, owner_age),
+            owner_dob = COALESCE(${result.ownerDob ?? null}, owner_dob),
+            owner_is_property_owner = COALESCE(${result.propertyOwner ?? null}, owner_is_property_owner),
+            owner_deceased = COALESCE(${result.deceased ?? null}, owner_deceased),
+            owner_litigator = COALESCE(${result.litigator ?? null}, owner_litigator),
+            owner_emails = ${result.emails.length ? result.emails : null}
+          WHERE id = ${target.parcel_id}::uuid
+        `;
         for (const phone of result.phones) {
           await client`
             INSERT INTO contacts (
-              parcel_id, number, line_type, carrier, dnc, rank, provider, traced_at, raw
+              parcel_id, number, line_type, carrier, dnc, tcpa, rank, provider, traced_at, raw
             ) VALUES (
               ${target.parcel_id}::uuid,
               ${phone.number},
               ${phone.lineType ?? null},
               ${phone.carrier ?? null},
               ${phone.dnc ?? null},
+              ${phone.tcpa ?? null},
               ${phone.rank},
               'tracerfy',
               now(),
@@ -182,6 +195,7 @@ export async function POST(
               line_type = EXCLUDED.line_type,
               carrier = EXCLUDED.carrier,
               dnc = EXCLUDED.dnc,
+              tcpa = EXCLUDED.tcpa,
               rank = EXCLUDED.rank,
               traced_at = now(),
               raw = EXCLUDED.raw

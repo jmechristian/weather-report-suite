@@ -3,10 +3,10 @@ import { point } from "@turf/helpers";
 import type { ScoringInput, ScoredLead } from "../types";
 
 const WEIGHTS = {
-  severity: 0.3,
+  severity: 0.25,
   coreProximity: 0.2,
-  roofAge: 0.2,
-  ownerOccupied: 0.15,
+  homeAge: 0.3,
+  ownerOccupied: 0.1,
   propertyFit: 0.1,
   sourceConfidence: 0.05,
 } as const;
@@ -25,19 +25,28 @@ export function normalizeHailInches(inches?: number | null): number {
   return clamp((inches - 0.75) / 1.75);
 }
 
-export function roofAgeFactor(
+function usableYear(year?: number | null): number | null {
+  if (year == null || year < 1800 || year > new Date().getFullYear() + 1) return null;
+  return year;
+}
+
+/** Home age / roof proxy. Reroof year wins, else year built. 20+ years = full intent. */
+export function homeAgeFactor(
   yearBuilt?: number | null,
   yearRemodeled?: number | null,
   nowYear = new Date().getFullYear(),
+  lastReroofYear?: number | null,
 ): number {
-  const year = yearRemodeled || yearBuilt;
+  const year = usableYear(lastReroofYear) ?? usableYear(yearBuilt) ?? usableYear(yearRemodeled);
   if (!year) return 0.5;
   const age = nowYear - year;
   if (age <= 8) return 0.15;
   if (age <= 15) return 0.4;
-  if (age <= 25) return 0.75;
+  if (age < 20) return 0.75;
   return 1;
 }
+
+export const roofAgeFactor = homeAgeFactor;
 
 function coreProximity(input: ScoringInput): number {
   const origin = point(input.parcelCentroid);
@@ -63,7 +72,12 @@ export function scoreLead(input: ScoringInput): ScoredLead {
   const factors = {
     severity,
     coreProximity: coreProximity(input),
-    roofAge: roofAgeFactor(input.yearBuilt, input.yearRemodeled),
+    homeAge: homeAgeFactor(
+      input.yearBuilt,
+      input.yearRemodeled,
+      undefined,
+      input.lastReroofYear,
+    ),
     ownerOccupied:
       input.ownerOccupied == null ? 0.7 : input.ownerOccupied ? 1 : 0.4,
     propertyFit: input.propertyType === "single_family" ? 1 : 0.2,

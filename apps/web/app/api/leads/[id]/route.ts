@@ -19,8 +19,16 @@ export async function GET(
         p.situs_zip,
         p.situs_state,
         p.owner_name,
+        p.mailing_address,
+        p.owner_age,
+        p.owner_dob,
+        p.owner_is_property_owner,
+        p.owner_deceased,
+        p.owner_litigator,
+        p.owner_emails,
         p.year_built,
         p.year_remodeled,
+        p.last_reroof_year,
         p.property_type,
         p.county_fips,
         ST_AsGeoJSON(p.centroid)::json AS centroid
@@ -30,10 +38,15 @@ export async function GET(
     `;
     if (!lead) return jsonError("Lead not found", 404);
     const phones = await client`
-      SELECT id, number, line_type, carrier, dnc, rank, traced_at
-      FROM contacts
-      WHERE parcel_id = ${lead.parcel_id}::uuid
-      ORDER BY rank
+      SELECT
+        c.id, c.number, c.line_type, c.carrier, c.dnc, c.tcpa, c.rank, c.traced_at,
+        (s.phone IS NOT NULL) AS suppressed,
+        (cons.phone IS NOT NULL) AS consented
+      FROM contacts c
+      LEFT JOIN phone_suppressions s ON s.phone = c.number
+      LEFT JOIN phone_consents cons ON cons.phone = c.number
+      WHERE c.parcel_id = ${lead.parcel_id}::uuid
+      ORDER BY c.rank
     `;
     return Response.json({ lead, phones });
   });

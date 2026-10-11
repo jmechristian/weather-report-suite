@@ -21,6 +21,10 @@ export type ServerEnv = {
   NWS_USER_AGENT: string;
   CRON_SECRET?: string;
   ALLOWED_EMAILS: string[];
+  TWILIO_ACCOUNT_SID?: string;
+  TWILIO_AUTH_TOKEN?: string;
+  TWILIO_FROM_NUMBER?: string;
+  TWILIO_WEBHOOK_URL?: string;
 };
 
 let cached: ServerEnv | undefined;
@@ -41,6 +45,10 @@ export function getServerEnv(): ServerEnv {
     NWS_USER_AGENT: optional("NWS_USER_AGENT") ?? "storm-leads (local-dev)",
     CRON_SECRET: optional("CRON_SECRET"),
     ALLOWED_EMAILS: emails,
+    TWILIO_ACCOUNT_SID: optional("TWILIO_ACCOUNT_SID"),
+    TWILIO_AUTH_TOKEN: optional("TWILIO_AUTH_TOKEN"),
+    TWILIO_FROM_NUMBER: optional("TWILIO_FROM_NUMBER"),
+    TWILIO_WEBHOOK_URL: optional("TWILIO_WEBHOOK_URL"),
   };
   return cached;
 }
@@ -67,4 +75,16 @@ export function getNwsUserAgent(): string {
 
 export function getTracerfyKey(): string | undefined {
   return optional("TRACERFY_API_KEY");
+}
+
+export function getTwilioConfig():
+  | { accountSid: string; authToken: string; from: string }
+  | null {
+  const env = getServerEnv();
+  if (!env.TWILIO_ACCOUNT_SID || !env.TWILIO_AUTH_TOKEN || !env.TWILIO_FROM_NUMBER) return null;
+  return {
+    accountSid: env.TWILIO_ACCOUNT_SID,
+    authToken: env.TWILIO_AUTH_TOKEN,
+    from: env.TWILIO_FROM_NUMBER,
+  };
 }

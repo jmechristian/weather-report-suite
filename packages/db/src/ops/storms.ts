@@ -21,6 +21,8 @@ export type IngestStormsResult = {
   mode: "incremental" | "full";
   from: string;
   to: string;
+  latestOccurredAt: string | null;
+  syncedAt: string | null;
   eventsFetched: number;
   eventsStored: number;
   reportsStored: number;
@@ -29,11 +31,27 @@ export type IngestStormsResult = {
 
 let ingestRunning = false;
 
+function wasInsert(flag: unknown): boolean {
+  return flag === true || flag === "t" || flag === "true";
+}
+
 export async function latestStormOccurredAt(client: Sql): Promise<Date | null> {
   const [row] = await client<{ t: Date | string | null }[]>`
     SELECT max(occurred_at) AS t FROM storm_events
   `;
   return row?.t ? new Date(row.t) : null;
+}
+
+/** When storm ingest last finished. Falls back to the newest stored warning if no sync has been recorded. */
+export async function latestStormSyncedAt(client: Sql): Promise<Date | null> {
+  const [row] = await client<{ t: Date | string | null }[]>`
+    SELECT synced_at AS t FROM sync_state WHERE key = 'storms'
+  `;
+  if (row?.t) return new Date(row.t);
+  const [fallback] = await client<{ t: Date | string | null }[]>`
+    SELECT max(created_at) AS t FROM storm_events
+  `;
+  return fallback?.t ? new Date(fallback.t) : null;
 }
 
 function resolveWindow(
@@ -71,10 +89,13 @@ export async function ingestStorms(
   if (ingestRunning) {
     const latest = await latestStormOccurredAt(client);
     const now = new Date();
+    const syncedAt = await latestStormSyncedAt(client);
     return {
       mode: "incremental",
       from: (latest ?? now).toISOString(),
       to: now.toISOString(),
+      latestOccurredAt: latest ? latest.toISOString() : null,
+      syncedAt: syncedAt ? syncedAt.toISOString() : null,
       eventsFetched: 0,
       eventsStored: 0,
       reportsStored: 0,
@@ -135,7 +156,7 @@ async function runIngestStorms(
   console.log(`Clipping ${events.length} warnings to the DMV county union`);
   let stored = 0;
   for (const event of events) {
-    if (await clipAndInsert(client, event, aoiGeojson)) stored += 1;
+    if ((await clipAndInsert(client, event, aoiGeojson)) === "insert") stored += 1;
   }
 
   const reports = (await fetchIemLsr(from, to, "LWX")).filter((r) =>
@@ -144,7 +165,7 @@ async function runIngestStorms(
   console.log(`Inserting ${reports.length} LWX storm reports in the DMV`);
   let reportCount = 0;
   for (const report of reports) {
-    const inserted = await client<{ id: string }[]>`
+    const inserted = await client<{ id: string; is_insert: boolean }[]>`
       INSERT INTO storm_reports (
         external_id, report_type, occurred_at, geom, magnitude, magnitude_unit, source, raw
       )
@@ -164,9 +185,9 @@ async function runIngestStorms(
       ON CONFLICT (source, external_id) DO UPDATE SET
         magnitude = EXCLUDED.magnitude,
         raw = EXCLUDED.raw
-      RETURNING id
+      RETURNING id, (xmax = 0) AS is_insert
     `;
-    if (inserted[0]) reportCount += 1;
+    if (wasInsert(inserted[0]?.is_insert)) reportCount += 1;
   }
 
   await db.execute(sql`
@@ -187,10 +208,19 @@ async function runIngestStorms(
     )
   `);
 
+  const [syncRow] = await client<{ synced_at: Date | string }[]>`
+    INSERT INTO sync_state (key, synced_at)
+    VALUES ('storms', now())
+    ON CONFLICT (key) DO UPDATE SET synced_at = excluded.synced_at
+    RETURNING synced_at
+  `;
+  const newest = await latestStormOccurredAt(client);
   return {
     mode,
     from: from.toISOString(),
     to: to.toISOString(),
+    latestOccurredAt: newest ? newest.toISOString() : null,
+    syncedAt: syncRow?.synced_at ? new Date(syncRow.synced_at).toISOString() : new Date().toISOString(),
     eventsFetched: events.length,
     eventsStored: stored,
     reportsStored: reportCount,
@@ -201,12 +231,12 @@ async function clipAndInsert(
   client: Sql,
   event: StormEventInput,
   aoiGeojson: string,
-): Promise<boolean> {
+): Promise<"insert" | "update" | "none"> {
   const geojson = JSON.stringify(event.geometry);
   const severity =
     event.eventType === "hail" ? event.hailIn : event.windMph ?? event.hailIn;
   const unit = event.eventType === "hail" ? "in" : "mph";
-  const rows = await client<{ id: string }[]>`
+  const rows = await client<{ id: string; is_insert: boolean }[]>`
     INSERT INTO storm_events (
       external_id, event_type, occurred_at, expires_at, geom,
       severity, severity_unit, wind_mph, hail_in, source, confidence, raw
@@ -244,7 +274,8 @@ async function clipAndInsert(
       hail_in = EXCLUDED.hail_in,
       confidence = EXCLUDED.confidence,
       raw = EXCLUDED.raw
-    RETURNING id
+    RETURNING id, (xmax = 0) AS is_insert
   `;
-  return Boolean(rows[0]);
+  if (!rows[0]) return "none";
+  return wasInsert(rows[0].is_insert) ? "insert" : "update";
 }

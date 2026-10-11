@@ -107,6 +107,7 @@ export const DMV_COUNTIES: DmvCountySeed[] = [
       city: "CITY",
       zip: "ZIP5",
       landUse: "DWELLING_TYPE",
+      yearBuilt: "YEAR_BUILT",
     },
   },
   {
@@ -139,6 +140,8 @@ export const DMV_COUNTIES: DmvCountySeed[] = [
       city: "PREMCITY",
       zip: "PREMZIP",
       landUse: "DESCLU",
+      yearBuilt: "YEARBLT",
+      yearBuiltAlt: "YRBLT_CAMA",
     },
   },
   {
@@ -320,6 +323,12 @@ export const DMV_COUNTIES: DmvCountySeed[] = [
       parcelIdAlt: "VisionPID",
       address: "SITEADDRESS",
       landUse: "Primary_Use_DESC",
+      yearBuilt: "Year_Built",
     },
   },
 ];
+
+export function dmvCounty(fips: string | null | undefined): DmvCountySeed | undefined {
+  if (!fips) return undefined;
+  return DMV_COUNTIES.find((county) => county.fips === fips);
+}

@@ -51,11 +51,23 @@ export const parcels = pgTable(
     situsZip: text("situs_zip"),
     situsState: text("situs_state").notNull().default("VA"),
     ownerName: text("owner_name"),
+    mailingAddress: text("mailing_address"),
+    ownerAge: integer("owner_age"),
+    ownerDob: text("owner_dob"),
+    ownerIsPropertyOwner: boolean("owner_is_property_owner"),
+    ownerDeceased: boolean("owner_deceased"),
+    ownerLitigator: boolean("owner_litigator"),
+    ownerEmails: text("owner_emails").array(),
     propertyType: text("property_type"),
     yearBuilt: integer("year_built"),
     yearRemodeled: integer("year_remodeled"),
+    lastReroofYear: integer("last_reroof_year"),
     lastSyncedAt: timestamp("last_synced_at", { withTimezone: true }).notNull().defaultNow(),
     lastTracedAt: timestamp("last_traced_at", { withTimezone: true }),
+    hotLead: boolean("hot_lead").notNull().default(false),
+    hotLeadSource: text("hot_lead_source"),
+    hotLeadAt: timestamp("hot_lead_at", { withTimezone: true }),
+    hotHold: boolean("hot_hold").notNull().default(false),
     raw: jsonb("raw"),
   },
   (t) => [
@@ -144,6 +156,7 @@ export const contacts = pgTable(
     lineType: text("line_type"),
     carrier: text("carrier"),
     dnc: boolean("dnc"),
+    tcpa: boolean("tcpa"),
     confidence: numeric("confidence"),
     rank: integer("rank").notNull().default(1),
     provider: text("provider").notNull(),
@@ -151,6 +164,68 @@ export const contacts = pgTable(
     raw: jsonb("raw"),
   },
   (t) => [unique("contacts_parcel_number_uid").on(t.parcelId, t.number)],
+);
+
+export const phoneSuppressions = pgTable("phone_suppressions", {
+  phone: text("phone").primaryKey(),
+  reason: text("reason").notNull().default("stop"),
+  sourceParcelId: uuid("source_parcel_id").references(() => parcels.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  raw: jsonb("raw"),
+});
+
+export const phoneConsents = pgTable("phone_consents", {
+  phone: text("phone").primaryKey(),
+  source: text("source").notNull().default("staff"),
+  parcelId: uuid("parcel_id").references(() => parcels.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const messageTemplates = pgTable("message_templates", {
+  key: text("key").primaryKey(),
+  body: text("body").notNull(),
+  keywords: text("keywords").array().notNull().default([]),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const smsCampaigns = pgTable("sms_campaigns", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  templateKey: text("template_key").notNull(),
+  bodySnapshot: text("body_snapshot").notNull(),
+  status: text("status").notNull().default("running"),
+  includeAlreadySent: boolean("include_already_sent").notNull().default(false),
+  requested: integer("requested").notNull().default(0),
+  sent: integer("sent").notNull().default(0),
+  skipped: integer("skipped").notNull().default(0),
+  failed: integer("failed").notNull().default(0),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  error: text("error"),
+});
+
+export const outreachEvents = pgTable(
+  "outreach_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    parcelId: uuid("parcel_id").references(() => parcels.id, { onDelete: "cascade" }),
+    contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "set null" }),
+    campaignId: uuid("campaign_id").references(() => smsCampaigns.id, { onDelete: "set null" }),
+    phone: text("phone").notNull(),
+    channel: text("channel").notNull().default("sms"),
+    direction: text("direction").notNull(),
+    status: text("status"),
+    body: text("body"),
+    isTest: boolean("is_test").notNull().default(false),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull().defaultNow(),
+    providerId: text("provider_id"),
+    raw: jsonb("raw"),
+  },
+  (t) => [
+    index("outreach_events_phone_idx").on(t.phone),
+    index("outreach_events_parcel_idx").on(t.parcelId, t.occurredAt),
+  ],
 );
 
 export const traceJobs = pgTable("trace_jobs", {
@@ -168,6 +243,11 @@ export const traceJobs = pgTable("trace_jobs", {
   submittedAt: timestamp("submitted_at", { withTimezone: true }).defaultNow(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   error: text("error"),
+});
+
+export const syncState = pgTable("sync_state", {
+  key: text("key").primaryKey(),
+  syncedAt: timestamp("synced_at", { withTimezone: true }).notNull(),
 });
 
 export const scoreJobs = pgTable("score_jobs", {

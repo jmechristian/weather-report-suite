@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { Logo } from "@/components/Logo";
 import { setPassword, signOut } from "./actions";
 
 const fieldClass =
@@ -11,8 +12,8 @@ export function SetPasswordForm({ email }: { email: string }) {
 
   return (
     <div className="w-full max-w-sm border border-[#3a342e] bg-[#211e1b] p-8">
-      <p className="text-xs tracking-[0.2em] text-[#b7aaa0] uppercase">Storm Leads</p>
-      <h1 className="serif mt-3 text-3xl">Set a password</h1>
+      <Logo className="block h-20 w-auto" />
+      <h1 className="mt-3 text-3xl">Set a password</h1>
       <p className="mt-2 text-sm text-[#b7aaa0]">
         Signed in as {email}. Save a password now so the next visit does not need a magic link.
       </p>

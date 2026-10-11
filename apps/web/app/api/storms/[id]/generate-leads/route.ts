@@ -1,7 +1,7 @@
 import { generateLeads } from "@storm-leads/db";
 import { withAuth, jsonError, getDb } from "@/lib/server";
 
-export const maxDuration = 300;
+export const maxDuration = 900;
 
 export async function POST(
   _req: Request,
@@ -13,8 +13,14 @@ export async function POST(
     const { db, client } = getDb();
     const [storm] = await client`SELECT id FROM storm_events WHERE id = ${id}::uuid`;
     if (!storm) return jsonError("Storm not found", 404);
-    const result = await generateLeads(db, client, id);
-    console.log(`generate-leads ${id}`, result);
-    return Response.json(result);
+    try {
+      const result = await generateLeads(db, client, id);
+      console.log(`generate-leads ${id}`, result);
+      return Response.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Scoring failed";
+      if (message.includes("already running")) return jsonError(message, 409);
+      throw err;
+    }
   });
 }

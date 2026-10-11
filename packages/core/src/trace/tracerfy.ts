@@ -1,9 +1,19 @@
 import type { SkipTraceProvider, TraceInput, TraceResult } from "../types";
-import { formatStaffordApn, expandStreetSuffix } from "./address";
+import {
+  expandStreetSuffix,
+  hasStreetAddress,
+  parcelLookupBody,
+  traceState,
+} from "./address";
 import { parseTracerfyLookup } from "./parse";
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function withCredits(result: TraceResult, extra: number): TraceResult {
+  if (!extra) return result;
+  return { ...result, creditsDeducted: (result.creditsDeducted ?? 0) + extra };
 }
 
 export class TracerfyProvider implements SkipTraceProvider {
@@ -31,11 +41,15 @@ export class TracerfyProvider implements SkipTraceProvider {
     return res;
   }
 
-  async traceByApn(parcelId: string): Promise<TraceResult | null> {
+  async traceByApn(
+    parcelId: string,
+    county: string,
+    state: string,
+  ): Promise<TraceResult | null> {
     const res = await this.postJson("https://tracerfy.com/v1/api/trace/parcel/lookup/", {
       parcel_id: parcelId,
-      county: "Stafford",
-      state: "VA",
+      county,
+      state,
     });
     if (!res.ok) {
       const text = await res.text();
@@ -48,7 +62,7 @@ export class TracerfyProvider implements SkipTraceProvider {
     const res = await this.postJson("https://tracerfy.com/v1/api/trace/lookup/", {
       address: expandStreetSuffix(input.address),
       city: input.city,
-      state: input.state,
+      state: traceState(input),
       zip: input.zip,
       find_owner: true,
     });
@@ -60,28 +74,25 @@ export class TracerfyProvider implements SkipTraceProvider {
   }
 
   async trace(input: TraceInput): Promise<TraceResult | null> {
-    const stafford = input.countyFips === "51179";
-    const apn = stafford
-      ? formatStaffordApn({
-          parcelId: input.parcelId,
-          parcelIdAlt: input.parcelIdAlt,
-          pageNum: input.pageNum,
-          captLot: input.captLot,
-          insNum: input.insNum,
-          sectNum: input.sectNum,
-        })
-      : null;
-    if (apn) {
+    const parcel = parcelLookupBody(input);
+    let priorCredits = 0;
+    if (parcel) {
       try {
-        const byApn = await this.traceByApn(apn);
+        const byApn = await this.traceByApn(parcel.parcel_id, parcel.county, parcel.state);
         if (byApn?.hit) return byApn;
-        console.warn("Tracerfy APN miss", apn);
-        return byApn;
+        priorCredits += byApn?.creditsDeducted ?? 0;
       } catch (err) {
-        console.warn("Tracerfy APN lookup skipped", apn, err);
+        console.warn("Tracerfy APN lookup skipped", parcel, err);
       }
     }
-    return this.traceByAddress(input);
+    if (hasStreetAddress(input)) {
+      const byAddress = await this.traceByAddress(input);
+      return byAddress ? withCredits(byAddress, priorCredits) : byAddress;
+    }
+    if (parcel) {
+      return { hit: false, phones: [], emails: [], raw: { parcel }, creditsDeducted: priorCredits };
+    }
+    return { hit: false, phones: [], emails: [], raw: { skipped: "no_parcel_or_address" }, creditsDeducted: 0 };
   }
 
   async traceBatch(

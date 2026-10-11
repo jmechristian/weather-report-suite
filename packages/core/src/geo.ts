@@ -34,8 +34,10 @@ export function classifyPropertyType(input: {
   const hay = `${input.landUse ?? ""} ${input.parcelType ?? ""}`.toLowerCase();
   if (/\bcondo/.test(hay)) return "condo";
   if (/\btownhome|townhouse|attached/.test(hay)) return "attached";
-  if (/\bsingle family|sfr|detached|ordinary|\bresidential\b/.test(hay)) return "single_family";
   if (/\bcommercial|industrial|office|retail/.test(hay)) return "commercial";
+  if (/\bsingle family|sfr|detached|ordinary|\bresidential\b/.test(hay)) return "single_family";
+  // Cadastral labels (Frederick TAXPARCELTYPE "Parcel - Base") are not land use.
+  if (/\bparcel\b/.test(hay)) return "single_family";
   if (!hay.trim() || hay.trim().length <= 2) return "single_family";
   return "other";
 }

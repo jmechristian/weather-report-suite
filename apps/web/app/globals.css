@@ -1,5 +1,25 @@
 @import "tailwindcss";
 
+/* One and a half steps up from the default Tailwind scale. */
+@theme {
+  --text-xs: 0.9375rem;
+  --text-xs--line-height: calc(1.375 / 0.9375);
+  --text-sm: 1.0625rem;
+  --text-sm--line-height: calc(1.625 / 1.0625);
+  --text-base: 1.1875rem;
+  --text-base--line-height: calc(1.75 / 1.1875);
+  --text-lg: 1.375rem;
+  --text-lg--line-height: calc(1.875 / 1.375);
+  --text-xl: 1.6875rem;
+  --text-xl--line-height: calc(2.125 / 1.6875);
+  --text-2xl: 2.0625rem;
+  --text-2xl--line-height: calc(2.375 / 2.0625);
+  --text-3xl: 2.625rem;
+  --text-3xl--line-height: calc(3 / 2.625);
+  --text-4xl: 3.375rem;
+  --text-4xl--line-height: 1;
+}
+
 :root {
   --bg: #161412;
   --panel: #211e1b;
@@ -21,18 +41,12 @@ body {
   font-family: var(--font-sans), "IBM Plex Sans", system-ui, sans-serif;
 }
 
-h1,
-h2,
-.serif {
-  font-family: var(--font-serif), "Fraunces", Georgia, serif;
-}
-
 .maplibregl-popup-content {
   background: #211e1b;
   color: #f3ece3;
   border-radius: 2px;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .maplibregl-popup-anchor-bottom .maplibregl-popup-tip {

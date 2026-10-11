@@ -53,4 +53,64 @@ describe("parseTracerfyLookup", () => {
     expect(result.hit).toBe(false);
     expect(result.creditsDeducted).toBe(0);
   });
+
+  it("keeps DNC, TCPA, line type, mailing, emails, and owner flags", () => {
+    const result = parseTracerfyLookup({
+      hit: true,
+      persons_count: 1,
+      credits_deducted: 5,
+      persons: [
+        {
+          full_name: "Paul Gangemi",
+          dob: "1940-04",
+          age: 66,
+          deceased: false,
+          property_owner: true,
+          litigator: false,
+          mailing_address: {
+            street: "12124 Mount Albert Rd",
+            city: "Ellicott City",
+            state: "MD",
+            zip: "21042",
+          },
+          phones: [
+            {
+              number: "4108632642",
+              type: "Mobile",
+              dnc: true,
+              tcpa: false,
+              carrier: "Cellco Partnership dba Verizon Wireless - CA",
+              rank: 1,
+            },
+            {
+              number: "7177479989",
+              type: "Landline",
+              dnc: false,
+              tcpa: false,
+              carrier: "Verizon North Inc - PA",
+              rank: 4,
+            },
+          ],
+          emails: [{ email: "blcnaud@gmail.com", rank: 1 }],
+        },
+      ],
+    });
+    expect(result.ownerName).toBe("Paul Gangemi");
+    expect(result.ownerAge).toBe(66);
+    expect(result.ownerDob).toBe("1940-04");
+    expect(result.propertyOwner).toBe(true);
+    expect(result.mailingAddressText).toBe("12124 Mount Albert Rd, Ellicott City, MD 21042");
+    expect(result.emails).toEqual(["blcnaud@gmail.com"]);
+    expect(result.phones[0]).toMatchObject({
+      number: "+14108632642",
+      lineType: "Mobile",
+      dnc: true,
+      tcpa: false,
+    });
+    expect(result.phones[1]).toMatchObject({
+      lineType: "Landline",
+      dnc: false,
+      tcpa: false,
+    });
+  });
 });

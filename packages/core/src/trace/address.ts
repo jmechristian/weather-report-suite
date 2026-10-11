@@ -1,3 +1,4 @@
+import { dmvCounty } from "../counties/dmv";
 import type { TraceInput } from "../types";
 
 export type AutocompleteMatch = {
@@ -37,16 +38,47 @@ export function autocompleteQuery(input: TraceInput): string {
     .join(", ");
 }
 
-export function pickStaffordMatch(results: AutocompleteMatch[]): AutocompleteMatch | null {
+export function pickCountyMatch(
+  results: AutocompleteMatch[],
+  countyFips?: string | null,
+): AutocompleteMatch | null {
   if (results.length === 0) return null;
+  if (!countyFips) return results[0] ?? null;
+  const fips = countyFips.trim();
+  const short = fips.slice(-3);
   return (
     results.find(
       (row) =>
-        row.fips === "51179" ||
-        row.county_fips === "179" ||
-        /stafford/i.test(row.county ?? ""),
-    ) ?? results[0]
+        row.fips === fips ||
+        row.county_fips === fips ||
+        row.county_fips === short,
+    ) ??
+    results[0] ??
+    null
   );
+}
+
+export function pickStaffordMatch(results: AutocompleteMatch[]): AutocompleteMatch | null {
+  return pickCountyMatch(results, "51179");
+}
+
+/** Tracerfy wants title-cased county names ('District Of Columbia', 'Palm Beach'). */
+export function tracerfyCountyName(name?: string | null): string | null {
+  const trimmed = (name ?? "").replace(/\s+County$/i, "").trim();
+  if (!trimmed) return null;
+  return trimmed.replace(/[A-Za-z][A-Za-z']*/g, (word) => {
+    return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+  });
+}
+
+export function traceState(input: Pick<TraceInput, "state" | "countyFips">): string {
+  const fromInput = (input.state ?? "").trim().toUpperCase();
+  if (/^[A-Z]{2}$/.test(fromInput)) return fromInput;
+  return dmvCounty(input.countyFips)?.state ?? fromInput;
+}
+
+export function hasStreetAddress(input: Pick<TraceInput, "address">): boolean {
+  return Boolean(input.address?.trim());
 }
 
 export function formatStaffordApn(input: {
@@ -61,7 +93,8 @@ export function formatStaffordApn(input: {
   if (prclid) {
     const parts = prclid.split(/\s+/).filter(Boolean);
     if (parts.length >= 2) return parts.join("-");
-    if (parts.length === 1 && parts[0].includes("-")) return parts[0];
+    const only = parts[0];
+    if (parts.length === 1 && only?.includes("-")) return only;
   }
   const page = (input.pageNum ?? "").trim();
   const ins = (input.insNum ?? "").trim();
@@ -72,6 +105,42 @@ export function formatStaffordApn(input: {
   const nsp = input.parcelIdAlt?.replace(/\s+/g, "").trim();
   if (nsp?.includes("-")) return nsp;
   return null;
+}
+
+function collapseParcelId(raw?: string | null): string | null {
+  const next = (raw ?? "").replace(/\s+/g, " ").trim();
+  return next || null;
+}
+
+/** GIS APN as Tracerfy expects it. Stafford PRCLID is space-padded map-insert-section-lot. */
+export function formatParcelIdForTrace(input: {
+  countyFips?: string | null;
+  parcelId?: string | null;
+  parcelIdAlt?: string | null;
+  pageNum?: string | null;
+  captLot?: string | null;
+  insNum?: string | null;
+  sectNum?: string | null;
+}): string | null {
+  if (input.countyFips === "51179") {
+    return formatStaffordApn(input) ?? collapseParcelId(input.parcelId);
+  }
+  return collapseParcelId(input.parcelId);
+}
+
+export type ParcelLookupBody = {
+  parcel_id: string;
+  county: string;
+  state: string;
+};
+
+export function parcelLookupBody(input: TraceInput): ParcelLookupBody | null {
+  const parcel_id = formatParcelIdForTrace(input);
+  const county =
+    tracerfyCountyName(input.countyName) ?? tracerfyCountyName(dmvCounty(input.countyFips)?.name);
+  const state = traceState(input);
+  if (!parcel_id || !county || !/^[A-Z]{2}$/.test(state)) return null;
+  return { parcel_id, county, state };
 }
 
 export function resolveFromMatch(input: TraceInput, match: AutocompleteMatch | null): TraceInput {

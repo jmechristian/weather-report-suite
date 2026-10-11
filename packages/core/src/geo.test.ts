@@ -24,6 +24,15 @@ describe("classifyPropertyType", () => {
   it("treats MD DESCLU Residential as single family", () => {
     expect(classifyPropertyType({ landUse: "Residential" })).toBe("single_family");
   });
+
+  it("treats Frederick TAXPARCELTYPE Parcel - Base as single family", () => {
+    expect(classifyPropertyType({ landUse: "Parcel - Base" })).toBe("single_family");
+    expect(classifyPropertyType({ parcelType: "Parcel" })).toBe("single_family");
+  });
+
+  it("still marks commercial parcels as commercial", () => {
+    expect(classifyPropertyType({ landUse: "Commercial Parcel" })).toBe("commercial");
+  });
 });
 
 describe("looksLikeNorthernVa", () => {

@@ -1,4 +1,5 @@
 import {
+  DMV_COUNTIES,
   SCORE_PARCEL_CAP,
   bufferEnvelope,
   classifyPropertyType,
@@ -82,6 +83,67 @@ function geometryJson(geom: GeoJSON.Geometry | null | undefined): string | null 
 
 function hasParcelLayer(url: string | null | undefined): url is string {
   return Boolean(url && url.startsWith("http"));
+}
+
+function yearValue(value: unknown): number | null {
+  const n = int(value);
+  if (n == null || n < 1800 || n > new Date().getFullYear() + 1) return null;
+  return n;
+}
+
+function yearFromAttrs(attrs: Record<string, unknown>, fieldMap: CountyFieldMap): {
+  yearBuilt: number | null;
+  yearRemodeled: number | null;
+} {
+  return {
+    yearBuilt: yearValue(attr(attrs, fieldMap.yearBuilt)) ?? yearValue(attr(attrs, fieldMap.yearBuiltAlt)),
+    yearRemodeled: yearValue(attr(attrs, fieldMap.yearRemodeled)),
+  };
+}
+
+function catalogFieldMap(fips: string, fallback: CountyFieldMap): CountyFieldMap {
+  return DMV_COUNTIES.find((c) => c.fips === fips)?.fieldMap ?? fallback;
+}
+
+function sqlQuotedList(values: string[]): string {
+  return values.map((v) => `'${v.replace(/'/g, "''")}'`).join(",");
+}
+
+async function loadYearIndex(
+  url: string,
+  idField: string,
+  fieldMap: CountyFieldMap,
+  parcelIds: string[],
+): Promise<Map<string, { yearBuilt: number | null; yearRemodeled: number | null }>> {
+  const map = new Map<string, { yearBuilt: number | null; yearRemodeled: number | null }>();
+  if (!idField || parcelIds.length === 0) return map;
+  const chunkSize = 80;
+  try {
+    for (let i = 0; i < parcelIds.length; i += chunkSize) {
+      const chunk = parcelIds.slice(i, i + chunkSize);
+      const where = `${idField} IN (${sqlQuotedList(chunk)})`;
+      for await (const page of paginateFeatures(url, {
+        extra: { where },
+        returnGeometry: false,
+        resultRecordCount: 500,
+        outFields: [idField, fieldMap.yearBuilt, fieldMap.yearRemodeled, fieldMap.yearBuiltAlt]
+          .filter(Boolean)
+          .join(","),
+      })) {
+        for (const feature of page) {
+          const attrs = (feature.properties ?? {}) as Record<string, unknown>;
+          const rawId = str(attr(attrs, idField));
+          if (!rawId) continue;
+          const years = yearFromAttrs(attrs, fieldMap);
+          map.set(normalizePin(rawId), years);
+          map.set(rawId, years);
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Year layer skipped", url, err);
+  }
+  return map;
 }
 
 async function loadAddressIndex(
@@ -262,7 +324,9 @@ export async function fetchStormParcels(
       missingLayers.push(county.name);
       continue;
     }
-    const fieldMap = county.field_map;
+    const fieldMap = catalogFieldMap(county.fips, county.field_map);
+    const dwellingUrl = fieldMap.layers?.dwelling;
+    const dwellingId = fieldMap.assessorId ?? fieldMap.parcelId;
     touched.push(county.name);
     await options.onProgress?.(
       `Fetching ${county.name} homes inside the warning (cap ${cap.toLocaleString()})…`,
@@ -279,8 +343,14 @@ export async function fetchStormParcels(
           extra,
           resultRecordCount: 500,
         })) {
+          const candidates: Array<{
+            parcelId: string;
+            geojson: string;
+            attrs: Record<string, unknown>;
+            propertyType: string;
+          }> = [];
           for (const feature of page) {
-            if (upserted + batch.length >= cap) break;
+            if (upserted + batch.length + candidates.length >= cap) break;
             const attrs = (feature.properties ?? {}) as Record<string, unknown>;
             const parcelId = str(attr(attrs, fieldMap.parcelId)) ?? str(attr(attrs, fieldMap.parcelIdAlt));
             const geojson = geometryJson(feature.geometry);
@@ -303,19 +373,33 @@ export async function fetchStormParcels(
               skipped += 1;
               continue;
             }
-            const pin = normalizePin(parcelId);
+            candidates.push({ parcelId, geojson, attrs, propertyType });
+          }
+          const years =
+            dwellingUrl && dwellingId
+              ? await loadYearIndex(
+                  dwellingUrl,
+                  dwellingId,
+                  fieldMap,
+                  candidates.map((c) => c.parcelId),
+                )
+              : new Map();
+          for (const row of candidates) {
+            const pin = normalizePin(row.parcelId);
             const fromAddr = addresses.get(pin);
+            const fromParcel = yearFromAttrs(row.attrs, fieldMap);
+            const fromTable = years.get(pin) ?? years.get(row.parcelId);
             batch.push({
-              parcelId,
-              geojson,
-              situsAddress: composeAddress(attrs, fieldMap) ?? fromAddr?.address ?? null,
+              parcelId: row.parcelId,
+              geojson: row.geojson,
+              situsAddress: composeAddress(row.attrs, fieldMap) ?? fromAddr?.address ?? null,
               situsCity:
-                str(attr(attrs, fieldMap.city)) ?? fromAddr?.city ?? fieldMap.cityFallback ?? null,
-              situsZip: normalizeZip(str(attr(attrs, fieldMap.zip)) ?? fromAddr?.zip ?? null),
-              propertyType,
-              yearBuilt: int(attr(attrs, fieldMap.yearBuilt)),
-              yearRemodeled: int(attr(attrs, fieldMap.yearRemodeled)),
-              raw: JSON.stringify(attrs),
+                str(attr(row.attrs, fieldMap.city)) ?? fromAddr?.city ?? fieldMap.cityFallback ?? null,
+              situsZip: normalizeZip(str(attr(row.attrs, fieldMap.zip)) ?? fromAddr?.zip ?? null),
+              propertyType: row.propertyType,
+              yearBuilt: fromParcel.yearBuilt ?? fromTable?.yearBuilt ?? null,
+              yearRemodeled: fromParcel.yearRemodeled ?? fromTable?.yearRemodeled ?? null,
+              raw: JSON.stringify(row.attrs),
             });
             if (batch.length >= 40) {
               upserted += await flush(client, county.fips, county.state, batch);

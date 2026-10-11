@@ -129,10 +129,13 @@ export async function nextTraceEstimate(
           OR EXISTS (SELECT 1 FROM contacts c WHERE c.parcel_id = p.id)
       )::int AS already_hits,
       count(*) FILTER (
-        WHERE p.situs_address IS NOT NULL
-          AND p.owner_name IS NULL
+        WHERE p.owner_name IS NULL
           AND NOT EXISTS (SELECT 1 FROM contacts c WHERE c.parcel_id = p.id)
           AND (p.last_traced_at IS NULL OR p.last_traced_at <= now() - interval '90 days')
+          AND (
+            NULLIF(btrim(p.county_parcel_id), '') IS NOT NULL
+            OR NULLIF(btrim(p.situs_address), '') IS NOT NULL
+          )
       )::int AS remaining
     FROM leads l
     JOIN parcels p ON p.id = l.parcel_id
