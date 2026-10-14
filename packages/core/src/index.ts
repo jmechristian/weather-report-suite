@@ -55,6 +55,16 @@ export {
   DEFAULT_ADMIN_TEMPLATE,
   DEFAULT_HOT_KEYWORDS,
 } from "./sms/messages";
+export {
+  estimateUsageCost,
+  SMS_OUTBOUND_USD_PER_SEGMENT,
+  SMS_INBOUND_USD_PER_REPLY,
+  TRACE_USD_PER_HIT,
+  SMS_NUMBER_USD_PER_MONTH,
+  SMS_CAMPAIGN_USD_PER_MONTH,
+  DEFAULT_CURRENT_MONTHLY_USD,
+} from "./sms/costEstimate";
+export type { UsageEstimate, UsageEstimateInput } from "./sms/costEstimate";
 export { twilioSignatureValid, sendTwilioSms } from "./sms/twilio";
 export type { TwilioConfig } from "./sms/twilio";
 export { postalCityForTrace, fiveDigitZip, STAFFORD_ZIP_POSTAL_CITY } from "./trace/postal";

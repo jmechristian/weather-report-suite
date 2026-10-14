@@ -2,6 +2,7 @@ const SECTIONS = [
   { href: "/", id: "storms", label: "Storms" },
   { href: "/traced", id: "traced", label: "Traced" },
   { href: "/messages", id: "messages", label: "Messages" },
+  { href: "/costs", id: "costs", label: "Costs" },
 ] as const;
 
 export function AppNav({ current }: { current: (typeof SECTIONS)[number]["id"] }) {
