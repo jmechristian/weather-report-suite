@@ -33,12 +33,19 @@ describe("classifyPropertyType", () => {
   it("still marks commercial parcels as commercial", () => {
     expect(classifyPropertyType({ landUse: "Commercial Parcel" })).toBe("commercial");
   });
+
+  it("treats a town house label as attached", () => {
+    expect(classifyPropertyType({ landUse: "Town House" })).toBe("attached");
+  });
 });
 
 describe("looksLikeNorthernVa", () => {
-  it("accepts eastern Anne Arundel and western Loudoun", () => {
+  it("accepts the coverage from Baltimore through Richmond", () => {
     expect(looksLikeNorthernVa(-76.49, 38.97)).toBe(true);
     expect(looksLikeNorthernVa(-77.7, 39.1)).toBe(true);
     expect(looksLikeNorthernVa(-77.03, 38.9)).toBe(true);
+    expect(looksLikeNorthernVa(-76.61, 39.29)).toBe(true);
+    expect(looksLikeNorthernVa(-77.46, 37.54)).toBe(true);
+    expect(looksLikeNorthernVa(-77.46, 36.85)).toBe(false);
   });
 });

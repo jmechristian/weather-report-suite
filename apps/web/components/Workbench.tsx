@@ -421,7 +421,7 @@ export function Workbench({ mapTilerKey }: { mapTilerKey: string }) {
         {storms.length === 0 ? (
           <p className="px-4 py-6 text-sm text-[#b7aaa0]">
             No events yet. Click <span className="text-[#f3ece3]">Sync storms</span> to pull IEM
-            warnings for WFO LWX, clipped to the DMV.
+            warnings for WFO LWX and AKQ, clipped to the county coverage.
           </p>
         ) : null}
         {storms.map((storm) => (

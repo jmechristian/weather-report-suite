@@ -52,8 +52,31 @@ const staffordMap: CountyFieldMap = {
   condoCodes: [1130],
 };
 
+const MD_PARCELS =
+  "https://mdgeodata.md.gov/imap/rest/services/PlanningCadastre/MD_ParcelBoundaries/MapServer/0";
+
+function marylandCounty(fips: string, name: string, jurs: string): DmvCountySeed {
+  return {
+    fips,
+    name,
+    state: "MD",
+    parcelServiceUrl: MD_PARCELS,
+    addressServiceUrl: null,
+    sourceSrid: 4326,
+    fieldMap: {
+      parcelId: "ACCTID",
+      address: "ADDRESS",
+      city: "CITY",
+      zip: "ZIPCODE",
+      landUse: "DESCLU",
+      yearBuilt: "YEARBLT",
+      parcelWhere: `JURSCODE='${jurs}' AND ACCTID <> 'ROW' AND DESCLU IN ('Residential', 'Town House')`,
+    },
+  };
+}
+
 /** Public parcel layers. Empty URL = TIGER boundary only until a live service is confirmed. */
-export const DMV_COUNTIES: DmvCountySeed[] = [
+const ORIGINAL_COUNTIES: DmvCountySeed[] = [
   {
     fips: "11001",
     name: "District of Columbia",
@@ -144,19 +167,7 @@ export const DMV_COUNTIES: DmvCountySeed[] = [
       yearBuiltAlt: "YRBLT_CAMA",
     },
   },
-  {
-    fips: "24003",
-    name: "Anne Arundel",
-    state: "MD",
-    parcelServiceUrl:
-      "https://gis.aacounty.org/arcgis/rest/services/Hosted/OPZ_Parcel_Prod_Copy_01262024_Reg139/FeatureServer/21",
-    addressServiceUrl: null,
-    sourceSrid: 4326,
-    fieldMap: {
-      parcelId: "puid",
-      parcelType: "property_type",
-    },
-  },
+  marylandCounty("24003", "Anne Arundel", "ANNE"),
   {
     fips: "24021",
     name: "Frederick",
@@ -327,6 +338,117 @@ export const DMV_COUNTIES: DmvCountySeed[] = [
     },
   },
 ];
+
+const VA_STATE_PARCELS =
+  "https://services.dwr.virginia.gov/arcgis/rest/services/Projects/VA_Parcels/FeatureServer/0";
+
+/** Counties added beyond the original Washington footprint. */
+export const EXPANDED_COUNTIES: DmvCountySeed[] = [
+  marylandCounty("24013", "Carroll", "CARR"),
+  marylandCounty("24005", "Baltimore County", "BACO"),
+  marylandCounty("24510", "Baltimore City", "BACI"),
+  marylandCounty("24025", "Harford", "HARF"),
+  {
+    fips: "51177",
+    name: "Spotsylvania",
+    state: "VA",
+    parcelServiceUrl:
+      "https://gis.spotsylvania.va.us/arcgis/rest/services/GeoHub/GeoHub/FeatureServer/45",
+    addressServiceUrl: null,
+    sourceSrid: 4326,
+    fieldMap: {
+      parcelId: "GPIN",
+      parcelIdAlt: "MAP_Pin",
+      address: "PROPADDRESS",
+      city: "PROPCITY",
+      yearBuilt: "YEARBUILT",
+    },
+  },
+  {
+    fips: "51630",
+    name: "Fredericksburg",
+    state: "VA",
+    parcelServiceUrl: "https://maps.fredericksburgva.gov/arcgis/rest/services/Tax_Parcels/MapServer/0",
+    addressServiceUrl: null,
+    sourceSrid: 4326,
+    fieldMap: {
+      parcelId: "PARID",
+      parcelIdAlt: "GPIN",
+      address: "PropertyAddress",
+      landUse: "GICLASS",
+      cityFallback: "Fredericksburg",
+    },
+  },
+  {
+    fips: "51033",
+    name: "Caroline",
+    state: "VA",
+    parcelServiceUrl: VA_STATE_PARCELS,
+    addressServiceUrl: null,
+    sourceSrid: 4326,
+    fieldMap: {
+      parcelId: "PARCELID",
+      parcelIdAlt: "PIN",
+      parcelWhere: "FIPS='51033'",
+    },
+  },
+  {
+    fips: "51085",
+    name: "Hanover",
+    state: "VA",
+    parcelServiceUrl:
+      "https://services2.arcgis.com/sKZWgJlU6SekCzQV/arcgis/rest/services/Hanover_Parcels/FeatureServer/0",
+    addressServiceUrl: null,
+    sourceSrid: 4326,
+    fieldMap: {
+      parcelId: "GPIN",
+      addressParts: ["ADDRESS", "ST_PREFIX", "ST_NAME", "ST_TYPE", "ST_SUFFIX"],
+      city: "CITY",
+      zip: "ZIP",
+    },
+  },
+  {
+    fips: "51087",
+    name: "Henrico",
+    state: "VA",
+    parcelServiceUrl:
+      "https://portal.henrico.gov/mapping/rest/services/GISViewerExternal/RealEstate/MapServer/0",
+    addressServiceUrl: null,
+    sourceSrid: 4326,
+    fieldMap: {
+      parcelId: "GPIN",
+      parcelIdAlt: "PID",
+      address: "FULL_ADDRESS",
+      city: "CITY",
+      zip: "ZIP_CODE",
+      landUse: "USE_DESCRIPTION",
+    },
+  },
+  {
+    fips: "51760",
+    name: "Richmond",
+    state: "VA",
+    parcelServiceUrl: "https://services1.arcgis.com/k3vhq11XkBNeeOfM/arcgis/rest/services/Parcels/FeatureServer/0",
+    addressServiceUrl: null,
+    sourceSrid: 4326,
+    fieldMap: {
+      parcelId: "PIN",
+      parcelIdAlt: "ParcelID",
+      landUse: "LandUse",
+      parcelType: "PropertyClass",
+      cityFallback: "Richmond",
+      spatialAddress: {
+        url: "https://services1.arcgis.com/k3vhq11XkBNeeOfM/arcgis/rest/services/Addresses/FeatureServer/0",
+        label: "AddressLabel",
+        zip: "ZipCode",
+        latitude: "Latitude",
+        longitude: "Longitude",
+      },
+    },
+  },
+];
+
+export const DMV_COUNTIES: DmvCountySeed[] = [...ORIGINAL_COUNTIES, ...EXPANDED_COUNTIES];
 
 export function dmvCounty(fips: string | null | undefined): DmvCountySeed | undefined {
   if (!fips) return undefined;

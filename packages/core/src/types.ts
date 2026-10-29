@@ -38,6 +38,16 @@ export type CountyFieldMap = {
   singleFamilyCodes?: Array<string | number>;
   attachedCodes?: Array<string | number>;
   condoCodes?: Array<string | number>;
+  /** ArcGIS where clause when several counties share one parcel service. */
+  parcelWhere?: string;
+  /** Address points with no parcel id. Joined to parcel polygons after ingest. */
+  spatialAddress?: {
+    url: string;
+    label: string;
+    zip?: string;
+    latitude: string;
+    longitude: string;
+  };
 };
 
 export type StormEventInput = {

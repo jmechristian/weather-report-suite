@@ -33,7 +33,7 @@ export function classifyPropertyType(input: {
 
   const hay = `${input.landUse ?? ""} ${input.parcelType ?? ""}`.toLowerCase();
   if (/\bcondo/.test(hay)) return "condo";
-  if (/\btownhome|townhouse|attached/.test(hay)) return "attached";
+  if (/\btown ?house|townhome|attached/.test(hay)) return "attached";
   if (/\bcommercial|industrial|office|retail/.test(hay)) return "commercial";
   if (/\bsingle family|sfr|detached|ordinary|\bresidential\b/.test(hay)) return "single_family";
   // Cadastral labels (Frederick TAXPARCELTYPE "Parcel - Base") are not land use.
@@ -49,6 +49,7 @@ export function toMultiPolygon(
   return { type: "MultiPolygon", coordinates: [geometry.coordinates] };
 }
 
+/** Degrees covering the seeded counties, from north of Baltimore through Richmond. Rejects state-plane coordinates. */
 export function looksLikeNorthernVa(lon: number, lat: number): boolean {
-  return lon > -79.3 && lon < -75.8 && lat > 37.8 && lat < 39.8;
+  return lon > -79.4 && lon < -75.7 && lat > 37.35 && lat < 39.85;
 }

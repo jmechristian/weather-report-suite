@@ -153,16 +153,22 @@ async function runIngestStorms(
     throw new Error("No county geometries seeded");
   }
 
-  console.log(`Clipping ${events.length} warnings to the DMV county union`);
+  console.log(`Clipping ${events.length} warnings to the county coverage`);
   let stored = 0;
   for (const event of events) {
     if ((await clipAndInsert(client, event, aoiGeojson)) === "insert") stored += 1;
   }
 
-  const reports = (await fetchIemLsr(from, to, "LWX")).filter((r) =>
-    looksLikeNorthernVa(r.longitude, r.latitude),
-  );
-  console.log(`Inserting ${reports.length} LWX storm reports in the DMV`);
+  const reports: Awaited<ReturnType<typeof fetchIemLsr>> = [];
+  for (const wfo of ["LWX", "AKQ"]) {
+    try {
+      const fetched = await fetchIemLsr(from, to, wfo);
+      reports.push(...fetched.filter((r) => looksLikeNorthernVa(r.longitude, r.latitude)));
+    } catch (err) {
+      console.warn(`IEM ${wfo} reports skipped:`, err instanceof Error ? err.message : err);
+    }
+  }
+  console.log(`Inserting ${reports.length} LWX and AKQ storm reports inside the coverage box`);
   let reportCount = 0;
   for (const report of reports) {
     const inserted = await client<{ id: string; is_insert: boolean }[]>`

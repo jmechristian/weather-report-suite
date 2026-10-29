@@ -27,11 +27,11 @@ type QueryOptions = {
 
 type GeoJsonFc = GeoJSON.FeatureCollection<GeoJSON.Geometry | null>;
 
-async function fetchWithRetry(url: string, init?: RequestInit, attempts = 3): Promise<Response> {
+async function fetchWithRetry(url: string, init?: RequestInit, attempts = 5): Promise<Response> {
   let lastError: unknown;
   for (let i = 0; i < attempts; i++) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 20_000);
+    const timer = setTimeout(() => ctrl.abort(), 90_000);
     try {
       const res = await fetch(url, {
         ...init,

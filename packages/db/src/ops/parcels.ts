@@ -340,6 +340,7 @@ export async function fetchStormParcels(
             : new Map();
         const batch: MappedParcel[] = [];
         for await (const page of paginateFeatures(county.parcel_service_url, {
+          where: fieldMap.parcelWhere,
           extra,
           resultRecordCount: 500,
         })) {
